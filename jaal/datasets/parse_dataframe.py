@@ -1,8 +1,11 @@
 """
-Author: Mohit Mayank
-
-Parse network data from dataframe format into visdcc format 
+Parse network data from dataframe format into visdcc format
 """
+import random
+import visdcc
+import networkx
+import textwrap
+import math
 
 def compute_scaling_vars_for_numerical_cols(df):
     """Identify and scale numerical cols"""
@@ -14,7 +17,7 @@ def compute_scaling_vars_for_numerical_cols(df):
     # scale numerical cols
     for col in numeric_cols:
         minn, maxx = df[col].min(), df[col].max()
-        scaling_vars[col] = {'min': minn, 'max': maxx} 
+        scaling_vars[col] = {'min': minn, 'max': maxx}
     # return
     return scaling_vars
 
@@ -24,10 +27,10 @@ def parse_dataframe(edge_df, node_df=None):
     Parameters
     -------------
     edge_df: pandas dataframe
-            The network edge data stored in format of pandas dataframe 
-    
+            The network edge data stored in format of pandas dataframe
+
     node_df: pandas dataframe (optional)
-            The network node data stored in format of pandas dataframe 
+            The network node data stored in format of pandas dataframe
     """
     # Data checks
     # Check 1: mandatory columns presence
@@ -46,30 +49,60 @@ def parse_dataframe(edge_df, node_df=None):
     if node_df is not None:
         scaling_vars['node'] = compute_scaling_vars_for_numerical_cols(node_df)
     scaling_vars['edge'] = compute_scaling_vars_for_numerical_cols(edge_df)
-    
+
     # create node list w.r.t. the presence of absence of node_df
     nodes = []
     if node_df is None:
         node_list = list(set(edge_df['from'].unique().tolist() + edge_df['to'].unique().tolist()))
-        nodes = [{'id': node_name, 'label': node_name, 'shape': 'dot', 'size': 7} for node_name in node_list]
+        nodes = [{'id': node_name,'shape': 'dot', 'size': 7} for node_name in node_list]
     else:
         # convert the node id column to string
         node_df.loc[:, 'id'] = node_df.loc[:, 'id'].astype(str)
-        # see if node imge url is present or not
-        node_image_url_flag = 'node_image_url' in node_df.columns
+        node_df.loc[:, 'idd'] = node_df.loc[:, 'Country'].astype(str)+':'+\
+                               node_df.loc[:, 'City'].astype(str)+':'+\
+                               node_df.loc[:, 'id'].astype(str)
         # create the node data
         for node in node_df.to_dict(orient='records'):
-            if not node_image_url_flag:
-                nodes.append({**node, **{'label': node['id'], 'shape': 'dot', 'size': 7}})
+            ll=len(str(node['au_list']).split(','))
+            if ll>=8:
+                rown=int(ll/5)+1
+                nodetitle=textwrap.wrap(str(node['au_list']),80)
+                nodetitle='<br>'.join(nodetitle)
+
+                if node['Country_type']=='LMIC':
+                    nodes.append({**node, **{'label': node['idd'],
+                                             'title': str(node['pmid_list'])+'<br>'+nodetitle,
+                                             'shape': 'square', 'size': 7}})
+                else:
+                    nodes.append({**node, **{'label': node['idd'],
+                                             'title': str(node['pmid_list'])+'<br>'+nodetitle,
+                                             'shape': 'dot', 'size': 7}})
             else:
-                nodes.append({**node, **{'label': node['id'], 'shape': 'circularImage',
-                                'image': node['node_image_url'], 
-                                'size': 20}})
+                if node['Country_type']=='LMIC':
+                    nodes.append({**node, **{'label': node['idd'],
+                                             'title':str(node['pmid_list'])+'<br>'+str(node['au_list']),
+                                             'shape': 'square', 'size': 7}})
+                else:
+                    nodes.append({**node, **{'label': node['idd'],
+                                             'title': str(node['pmid_list']) + '<br>' + str(node['au_list']),
+                                             'shape': 'dot', 'size': 7}})
 
     # create edges from df
     edges = []
+    edge_df.loc[:, 'year-factor'] = edge_df.loc[:, 'year-factor'].astype(str)
     for row in edge_df.to_dict(orient='records'):
-        edges.append({**row, **{'id': row['from'] + "__" + row['to'],  'color': {'color': '#97C2FC'}}})
-    
+        edges.append({**row,
+                      **{'id':row['from']+"__" +row['to']+'/'+str(row['year-factor']),
+                         'idd':node_df.loc[node_df[node_df['id']==row['from']].index[0],'idd']+ \
+                               "--" +\
+                               node_df.loc[node_df[node_df['id']==row['to']].index[0],'idd']+"/"+str(row['year-factor']),
+                         'title': str(row['from'])+"__" +str(row['to'])+'/'+str(row['year-factor']),
+                         'year-factor':str(row['year-factor']),
+                         'color': {'color': '#97C2FC'},
+                         "selfReferenceSize": math.log((int(row['year-factor'])-2001)/0.2,1.2)
+                         }
+                      })
+        # edges.append({**row, **{'id': row['from'] + "__" + row['to'],  'color': {'color': '#97C2FC'}}})
+
     # return
     return {'nodes': nodes, 'edges': edges}, scaling_vars
