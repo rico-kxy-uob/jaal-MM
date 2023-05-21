@@ -3,7 +3,6 @@ Parse network data from dataframe format into visdcc format
 """
 import random
 import visdcc
-import networkx
 import textwrap
 import math
 
